@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apply — Awards Recruitment Ltd</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600;6..72,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --navy:#1D2753;
+    --navy-dark:#141B3D;
+    --gold:#FAB012;
+    --gold-muted:#D3AF54;
+    --paper:#FBFAF7;
+    --line:#E4E1D8;
+    --ink:#22262F;
+    --ink-soft:#6B7280;
+    --danger:#B3261E;
+    --danger-bg:#FDECEA;
+    --ok:#1E6E4C;
+    --ok-bg:#EAF6EF;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Inter',system-ui,sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{font-family:'Newsreader',Georgia,serif;font-weight:600;margin:0;}
+  a{color:var(--navy);}
+
+  header.site{
+    background:var(--navy);
+    color:#fff;
+    padding:22px 28px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:12px;
+  }
+  header.site .brand{display:flex;align-items:center;gap:14px;}
+  header.site .mark{
+    width:46px;height:46px;border-radius:50%;
+    background:var(--gold);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Newsreader',serif;font-weight:700;font-size:22px;color:var(--navy);
+    flex-shrink:0;
+  }
+  header.site .brand h1{font-size:19px;color:#fff;letter-spacing:.2px;}
+  header.site .brand p{margin:2px 0 0;font-size:12px;color:var(--gold-muted);font-weight:500;}
+  header.site .faq{
+    font-size:13px;color:#fff;text-decoration:none;border-bottom:1px solid var(--gold);
+    padding-bottom:2px;
+  }
+  header.site .faq:hover{color:var(--gold);}
+
+  main{max-width:720px;margin:0 auto;padding:40px 20px 80px;}
+
+  .intro{margin-bottom:32px;}
+  .intro h2{font-size:26px;color:var(--navy);margin-bottom:8px;}
+  .intro p{color:var(--ink-soft);font-size:15px;max-width:56ch;}
+
+  .stepper{display:flex;align-items:center;gap:8px;margin-bottom:36px;}
+  .stepper .dot{
+    display:flex;align-items:center;gap:8px;flex:1;
+  }
+  .stepper .circle{
+    width:30px;height:30px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:600;
+    border:1.5px solid var(--line);color:var(--ink-soft);background:#fff;
+    flex-shrink:0;
+  }
+  .stepper .label{font-size:12.5px;color:var(--ink-soft);font-weight:500;white-space:nowrap;}
+  .stepper .rule{flex:1;height:1.5px;background:var(--line);}
+  .stepper .dot.done .circle{background:var(--navy);border-color:var(--navy);color:#fff;}
+  .stepper .dot.active .circle{border-color:var(--gold);color:var(--navy);box-shadow:0 0 0 3px rgba(250,176,18,.25);}
+  .stepper .dot.active .label{color:var(--navy);font-weight:700;}
+  .stepper .dot.done .label{color:var(--navy);}
+
+  .card{
+    background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+    padding:32px;
+  }
+  .card h3{font-size:19px;color:var(--navy);margin-bottom:4px;}
+  .card .sub{color:var(--ink-soft);font-size:13.5px;margin-bottom:24px;}
+
+  .field{margin-bottom:18px;}
+  .field label{display:block;font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;}
+  .field input[type=text],.field input[type=email],.field input[type=tel]{
+    width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:8px;
+    font-size:14.5px;font-family:inherit;color:var(--ink);background:#fff;
+  }
+  .field input:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(250,176,18,.18);}
+  .field .err{color:var(--danger);font-size:12.5px;margin-top:5px;}
+
+  .doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media(max-width:560px){.doc-grid{grid-template-columns:1fr;}}
+  .doc{
+    border:1.5px solid var(--line);border-radius:9px;padding:15px;position:relative;
+    background:var(--paper);transition:border-color .15s;
+  }
+  .doc.staged{border-color:var(--ok);background:var(--ok-bg);}
+  .doc.error{border-color:var(--danger);background:var(--danger-bg);}
+  .doc label{display:block;font-size:13.5px;font-weight:600;margin-bottom:2px;}
+  .doc .hint{font-size:11.5px;color:var(--ink-soft);display:block;margin-bottom:10px;}
+  .doc .filebtn{position:relative;overflow:hidden;}
+  .doc .filebtn input[type=file]{
+    position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;
+  }
+  .doc .filebtn .zone{
+    border:1.5px dashed var(--line);border-radius:7px;padding:10px 8px;text-align:center;
+    font-size:12px;color:var(--ink-soft);background:#fff;
+  }
+  .doc.staged .filebtn .zone{border-style:solid;border-color:var(--ok);color:var(--ok);font-weight:600;}
+  .doc .msg{font-size:11.5px;margin-top:7px;font-weight:600;}
+  .doc .msg.ok{color:var(--ok);}
+  .doc .msg.bad{color:var(--danger);}
+
+  .review-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px;}
+  .review-row:last-child{border-bottom:none;}
+  .review-row .k{color:var(--ink-soft);}
+  .review-row .v{font-weight:600;text-align:right;}
+  .review-row .v.ok{color:var(--ok);}
+  .review-row .v.bad{color:var(--danger);}
+
+  .actions{display:flex;justify-content:space-between;align-items:center;margin-top:28px;padding-top:22px;border-top:1px solid var(--line);}
+  button{font-family:inherit;font-size:14px;font-weight:600;border-radius:9px;cursor:pointer;transition:opacity .15s;}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  .btn-primary{
+    background:var(--navy);color:#fff;border:none;padding:12px 26px;
+    border-bottom:3px solid var(--gold);
+  }
+  .btn-primary:hover:not(:disabled){opacity:.92;}
+  .btn-ghost{background:none;border:1.5px solid var(--line);color:var(--ink);padding:11px 22px;}
+  .btn-ghost:hover:not(:disabled){border-color:var(--navy);}
+
+  .banner{padding:12px 14px;border-radius:8px;font-size:13.5px;margin-bottom:20px;}
+  .banner.bad{background:var(--danger-bg);color:var(--danger);}
+
+  .success{text-align:center;padding:20px 0;}
+  .success .seal{
+    width:64px;height:64px;border-radius:50%;background:var(--ok-bg);color:var(--ok);
+    display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 18px;
+  }
+  .success h3{font-size:23px;color:var(--navy);margin-bottom:8px;}
+  .success p{color:var(--ink-soft);font-size:14.5px;max-width:44ch;margin:0 auto 18px;}
+  .success .ref{
+    display:inline-block;font-family:'Newsreader',serif;font-size:19px;font-weight:600;
+    color:var(--navy);background:var(--paper);border:1.5px dashed var(--gold-muted);
+    padding:10px 20px;border-radius:8px;letter-spacing:.5px;
+  }
+
+  footer.site{text-align:center;padding:26px 20px 40px;color:var(--ink-soft);font-size:12.5px;}
+  footer.site a{color:var(--ink-soft);}
+
+  .spinner{
+    width:15px;height:15px;border-radius:50%;border:2px solid rgba(255,255,255,.4);
+    border-top-color:#fff;display:inline-block;vertical-align:-2px;margin-right:7px;
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="brand">
+    <div class="mark">A</div>
+    <div>
+      <h1>Awards Recruitment Ltd</h1>
+      <p>Your Star Job Agency &middot; Nairobi</p>
+    </div>
+  </div>
+  <!-- TODO: replace # with the real FAQ page link once you send it over -->
+  <a class="faq" href="#" id="faqLink" target="_blank" rel="noopener">Frequently Asked Questions</a>
+</header>
+
+<main>
+
+  <div class="intro">
+    <h2>Start your application</h2>
+    <p>Fill in your details and upload your documents below. This takes about five minutes — have your CV, passport, and certificates ready as PDF, JPEG, or Word files.</p>
+  </div>
+
+  <div class="stepper" id="stepper"></div>
+
+  <div id="banner"></div>
+
+  <!-- STEP 1 -->
+  <section class="card" id="step1">
+    <h3>Your details</h3>
+    <p class="sub">We'll use this to contact you about your application.</p>
+    <div class="field">
+      <label for="fullName">Full name</label>
+      <input type="text" id="fullName" placeholder="e.g. Amina Omondi">
+      <div class="err" id="err-fullName"></div>
+    </div>
+    <div class="field">
+      <label for="email">Email address</label>
+      <input type="email" id="email" placeholder="you@example.com">
+      <div class="err" id="err-email"></div>
+    </div>
+    <div class="field">
+      <label for="phone">Phone number</label>
+      <input type="tel" id="phone" placeholder="+254 7XX XXX XXX">
+      <div class="err" id="err-phone"></div>
+    </div>
+    <div class="actions">
+      <span></span>
+      <button class="btn-primary" onclick="goToStep(2)">Continue to documents</button>
+    </div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="card" id="step2" style="display:none;">
+    <h3>Upload your documents</h3>
+    <p class="sub">Accepted formats: PDF, JPEG, or Word (.docx). Maximum 5MB per file.</p>
+    <div class="doc-grid" id="docGrid"></div>
+    <div class="actions">
+      <button class="btn-ghost" onclick="goToStep(1)">Back</button>
+      <button class="btn-primary" onclick="goToStep(3)">Review application</button>
+    </div>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="card" id="step3" style="display:none;">
+    <h3>Review before submitting</h3>
+    <p class="sub">Please check everything is correct — you can still go back and fix anything.</p>
+    <div id="reviewList"></div>
+    <div class="actions">
+      <button class="btn-ghost" onclick="goToStep(2)">Back</button>
+      <button class="btn-primary" id="submitBtn" onclick="submitApplication()">Submit application</button>
+    </div>
+  </section>
+
+  <!-- STEP 4: SUCCESS -->
+  <section class="card success" id="step4" style="display:none;">
+    <div class="seal">&#10003;</div>
+    <h3>Application received</h3>
+    <p>Thank you — our team will review your documents and contact you by email or phone with next steps.</p>
+    <div class="ref" id="refCode"></div>
+  </section>
+
+</main>
+
+<footer class="site">
+  &copy; 2026 Awards Recruitment Ltd &middot; Nairobi, Kenya &middot; <a href="https://awardsrecruitment.com/" target="_blank" rel="noopener">awardsrecruitment.com</a>
+</footer>
+
+<script>
+// ============================================================================
+// CONFIG — your live Supabase project
+// ============================================================================
+const SUPABASE_URL = "https://phxtdnnmggpmmcyeadxk.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoeHRkbm5tZ2dwbW1jeWVhZHhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzOTYwODMsImV4cCI6MjEwNTk3MjA4M30.rXzUoW5ZPhTQzAAQ9HctpUGjPS0YS5Rn1oEG5vx01HU";
+
+// TODO: paste your real FAQ page URL here once you have it, then it'll also
+// update the link in the header automatically.
+const FAQ_URL = "#";
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const REQUIRED_DOCS = [
+  { id: "cv",                   label: "Curriculum Vitae (CV)" },
+  { id: "passport",             label: "Valid Passport" },
+  { id: "passport_photo",       label: "Passport-size Photo" },
+  { id: "good_conduct",         label: "Certificate of Good Conduct" },
+  { id: "caregiving_cert",      label: "Caregiving Certificate" },
+  { id: "transcripts",          label: "Academic Transcripts" },
+  { id: "recommendation_letter",label: "Recommendation Letter" }
+];
+
+const ALLOWED_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/jpg",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+];
+const MAX_SIZE = 5 * 1024 * 1024;
+
+let currentStep = 1;
+let stagedFiles = {}; // { docId: File }
+
+document.getElementById("faqLink").href = FAQ_URL;
+
+// ---------------------------------------------------------------------------
+// Stepper UI
+// ---------------------------------------------------------------------------
+const STEP_LABELS = ["Your details", "Documents", "Review", "Done"];
+function renderStepper(){
+  const el = document.getElementById("stepper");
+  el.innerHTML = "";
+  STEP_LABELS.forEach((label, i) => {
+    const n = i + 1;
+    const state = n < currentStep ? "done" : (n === currentStep ? "active" : "");
+    const dot = document.createElement("div");
+    dot.className = "dot " + state;
+    dot.innerHTML = `<div class="circle">${n < currentStep ? "&#10003;" : n}</div><div class="label">${label}</div>`;
+    el.appendChild(dot);
+    if (n < STEP_LABELS.length) {
+      const rule = document.createElement("div");
+      rule.className = "rule";
+      el.appendChild(rule);
+    }
+  });
+}
+renderStepper();
+
+// ---------------------------------------------------------------------------
+// Document upload grid
+// ---------------------------------------------------------------------------
+function renderDocGrid(){
+  const grid = document.getElementById("docGrid");
+  grid.innerHTML = "";
+  REQUIRED_DOCS.forEach(doc => {
+    const wrap = document.createElement("div");
+    wrap.className = "doc";
+    wrap.id = "doc-" + doc.id;
+    wrap.innerHTML = `
+      <label>${doc.label}</label>
+      <span class="hint">PDF, JPEG or Word &middot; max 5MB</span>
+      <div class="filebtn">
+        <input type="file" accept=".pdf,.jpg,.jpeg,.docx" onchange="handleFile('${doc.id}', this.files[0])">
+        <div class="zone" id="zone-${doc.id}">Choose file</div>
+      </div>
+      <div class="msg" id="msg-${doc.id}"></div>
+    `;
+    grid.appendChild(wrap);
+  });
+}
+renderDocGrid();
+
+function handleFile(docId, file){
+  const wrap = document.getElementById("doc-" + docId);
+  const zone = document.getElementById("zone-" + docId);
+  const msg = document.getElementById("msg-" + docId);
+  if (!file) return;
+
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    wrap.className = "doc error";
+    msg.className = "msg bad";
+    msg.textContent = "Wrong format — please upload a PDF, JPEG, or Word file.";
+    delete stagedFiles[docId];
+    return;
+  }
+  if (file.size > MAX_SIZE) {
+    wrap.className = "doc error";
+    msg.className = "msg bad";
+    msg.textContent = "File is too large — 5MB maximum.";
+    delete stagedFiles[docId];
+    return;
+  }
+
+  stagedFiles[docId] = file;
+  wrap.className = "doc staged";
+  zone.textContent = file.name.length > 26 ? file.name.slice(0, 24) + "…" : file.name;
+  msg.className = "msg ok";
+  msg.textContent = "Ready to submit";
+}
+
+// ---------------------------------------------------------------------------
+// Step navigation + validation
+// ---------------------------------------------------------------------------
+function showBanner(text){
+  const el = document.getElementById("banner");
+  el.innerHTML = text ? `<div class="banner bad">${text}</div>` : "";
+}
+
+function validateStep1(){
+  let ok = true;
+  const fullName = document.getElementById("fullName").value.trim();
+  const email = document.getElementById("email").value.trim();
+  const phone = document.getElementById("phone").value.trim();
+  document.getElementById("err-fullName").textContent = "";
+  document.getElementById("err-email").textContent = "";
+  document.getElementById("err-phone").textContent = "";
+
+  if (!fullName) { document.getElementById("err-fullName").textContent = "Please enter your full name."; ok = false; }
+  if (!/^\S+@\S+\.\S+$/.test(email)) { document.getElementById("err-email").textContent = "Please enter a valid email address."; ok = false; }
+  if (!phone) { document.getElementById("err-phone").textContent = "Please enter a phone number."; ok = false; }
+  return ok;
+}
+
+function goToStep(n){
+  showBanner("");
+  if (currentStep === 1 && n === 2 && !validateStep1()) return;
+  if (currentStep === 2 && n === 3) {
+    const missing = REQUIRED_DOCS.filter(d => !stagedFiles[d.id]);
+    if (missing.length) {
+      showBanner(`Please upload all 7 documents before continuing. Missing: ${missing.map(d => d.label).join(", ")}.`);
+      return;
+    }
+  }
+  if (n === 3) renderReview();
+
+  document.getElementById("step" + currentStep).style.display = "none";
+  currentStep = n;
+  document.getElementById("step" + currentStep).style.display = "block";
+  renderStepper();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function renderReview(){
+  const list = document.getElementById("reviewList");
+  const fullName = document.getElementById("fullName").value.trim();
+  const email = document.getElementById("email").value.trim();
+  const phone = document.getElementById("phone").value.trim();
+
+  let rows = [
+    ["Full name", fullName],
+    ["Email", email],
+    ["Phone", phone]
+  ].map(([k, v]) => `<div class="review-row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("");
+
+  rows += REQUIRED_DOCS.map(d => {
+    const file = stagedFiles[d.id];
+    return `<div class="review-row"><span class="k">${d.label}</span><span class="v ok">${file ? file.name : "—"}</span></div>`;
+  }).join("");
+
+  list.innerHTML = rows;
+}
+
+// ---------------------------------------------------------------------------
+// Submission — writes to Supabase (database + storage) live
+// ---------------------------------------------------------------------------
+async function submitApplication(){
+  const btn = document.getElementById("submitBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Submitting…';
+  showBanner("");
+
+  const fullName = document.getElementById("fullName").value.trim();
+  const email = document.getElementById("email").value.trim();
+  const phone = document.getElementById("phone").value.trim();
+
+  const applicantId = crypto.randomUUID();
+
+  try {
+    // 1. Create the applicant record
+    const { error: applicantErr } = await sb.from("applicants").insert({
+      id: applicantId,
+      full_name: fullName,
+      email: email,
+      phone: phone
+    });
+    if (applicantErr) throw new Error("Could not save your details: " + applicantErr.message);
+
+    // 2. Upload each document and record it
+    for (const doc of REQUIRED_DOCS) {
+      const file = stagedFiles[doc.id];
+      const ext = file.name.split(".").pop();
+      const path = `${applicantId}/${doc.id}.${ext}`;
+
+      const { error: uploadErr } = await sb.storage
+        .from("applicant-documents")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (uploadErr) throw new Error(`Could not upload ${doc.label}: ${uploadErr.message}`);
+
+      const { error: docErr } = await sb.from("documents").insert({
+        applicant_id: applicantId,
+        doc_type: doc.id,
+        file_path: path,
+        file_name: file.name,
+        mime_type: file.type,
+        file_size_bytes: file.size
+      });
+      if (docErr) throw new Error(`Could not record ${doc.label}: ${docErr.message}`);
+    }
+
+    // 3. Success
+    const refCode = "AR-" + applicantId.slice(0, 8).toUpperCase();
+    document.getElementById("refCode").textContent = refCode;
+    goToStep(4);
+
+  } catch (err) {
+    showBanner(err.message || "Something went wrong. Please check your connection and try again.");
+    btn.disabled = false;
+    btn.textContent = "Submit application";
+  }
+}
+</script>
+
+</body>
+</html>

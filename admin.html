@@ -10,6 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
     --navy:#1D2753; --navy-dark:#141B3D; --gold:#FAB012; --gold-muted:#D3AF54;
@@ -128,6 +129,27 @@
   .loading{text-align:center;padding:60px;color:var(--ink-soft);}
   .spinner{width:15px;height:15px;border-radius:50%;border:2px solid rgba(29,39,83,.25);border-top-color:var(--navy);display:inline-block;vertical-align:-2px;margin-right:7px;animation:spin .7s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
+
+  .doc-row{flex-wrap:wrap;}
+  .doc-row .docname.muted{color:var(--ink-soft);font-weight:600;font-size:13.5px;}
+  .doc-row .actions{flex-wrap:wrap;justify-content:flex-end;}
+  .mini{background:#fff;border:1.5px solid var(--line);color:var(--navy);padding:6px 11px;border-radius:7px;font-size:12px;font-weight:600;}
+  .mini:hover:not(:disabled){border-color:var(--navy);}
+  .mini.solid{background:var(--navy);border-color:var(--navy);color:#fff;margin-top:10px;}
+  .mini:disabled{opacity:.45;cursor:not-allowed;}
+  .section-label{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-soft);font-weight:700;margin:20px 0 10px;}
+  .pack{border:1.5px solid var(--gold-muted);background:#FFFBF0;border-radius:10px;padding:14px 16px;}
+  .pack-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px;flex-wrap:wrap;}
+  .pack-head h4{margin:0;font-family:'Newsreader',serif;font-size:16px;color:var(--navy);}
+  .pack-head span{font-size:12px;color:var(--ink-soft);font-weight:600;}
+  .pack-head span.ready{color:var(--ok);}
+  .pack-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #F1E6C6;}
+  .pack-info{display:flex;flex-direction:column;min-width:0;}
+  .pack-info b{font-size:13px;color:var(--navy);}
+  .pack-info span{font-size:11.5px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .preview-box .phead .btns{display:flex;gap:8px;}
+  .preview-box .phead button.dl{background:var(--navy);}
+  .preview-fallback small{display:block;margin-top:8px;color:var(--danger);}
 </style>
 </head>
 <body>
@@ -219,7 +241,10 @@
   <div class="preview-box">
     <div class="phead">
       <span id="previewTitle">Document preview</span>
-      <button onclick="closePreview()">Close</button>
+      <div class="btns">
+        <button class="dl" onclick="downloadCurrentPreview()">Download</button>
+        <button onclick="closePreview()">Close</button>
+      </div>
     </div>
     <div class="pbody" id="previewBody"></div>
   </div>
@@ -421,39 +446,129 @@ function escapeHtml(s){
 // ---------------------------------------------------------------------------
 // APPLICANT DETAIL MODAL
 // ---------------------------------------------------------------------------
+const BUCKET = "applicant-documents";
+const ALLOWED_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/jpg",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+];
+const MAX_SIZE = 5 * 1024 * 1024;
+
+// The three files the partner's job application portal asks for
+const PARTNER_DOCS = [
+  { type: "cv", label: "CV" },
+  { type: "passport_photo", label: "Passport Photo" },
+  { type: "passport", label: "Travelling Passport" }
+];
+
+let previewBlobUrl = null;
+let previewDocId = null;
+
+function findDoc(docId){
+  for (const id in documentsByApplicant) {
+    const d = documentsByApplicant[id].find(x => x.id === docId);
+    if (d) return d;
+  }
+  return null;
+}
+function getDocByType(applicantId, type){
+  return (documentsByApplicant[applicantId] || []).find(d => d.doc_type === type);
+}
+function extOf(name){
+  const m = /\.([A-Za-z0-9]+)$/.exec(name || "");
+  return m ? m[1].toLowerCase() : "";
+}
+function safeName(s){
+  return String(s).replace(/[\\/:*?"<>|]+/g, "").trim();
+}
+function downloadName(applicant, doc, label){
+  return `${safeName(applicant.full_name)} - ${label}.${extOf(doc.file_name) || "pdf"}`;
+}
+
+// Downloads the file through your signed-in session (no public link involved)
+async function fetchBlob(doc){
+  const { data, error } = await sb.storage.from(BUCKET).download(doc.file_path);
+  if (error || !data) throw new Error((error && error.message) || "The file could not be retrieved.");
+  return new Blob([data], { type: doc.mime_type });
+}
+
+function saveBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function renderPartnerPack(a){
+  const rows = PARTNER_DOCS.map(p => {
+    const doc = getDocByType(a.id, p.type);
+    const detail = doc ? `${escapeHtml(doc.file_name)} · ${doc.status}` : "Not uploaded yet";
+    const btn = doc ? `<button class="mini" onclick="downloadDoc('${doc.id}','${p.label}')">Download</button>` : "";
+    return `<div class="pack-row"><div class="pack-info"><b>${p.label}</b><span>${detail}</span></div>${btn}</div>`;
+  }).join("");
+
+  const have = PARTNER_DOCS.filter(p => getDocByType(a.id, p.type)).length;
+  const approved = PARTNER_DOCS.filter(p => { const d = getDocByType(a.id, p.type); return d && d.status === "approved"; }).length;
+  const summary = approved === PARTNER_DOCS.length
+    ? "All 3 approved — ready for the partner portal"
+    : `${approved} of 3 approved`;
+
+  return `<div class="pack">
+    <div class="pack-head"><h4>Partner portal pack</h4><span class="${approved === 3 ? 'ready' : ''}">${summary}</span></div>
+    ${rows}
+    <button class="mini solid" id="packZipBtn" ${have === 3 ? "" : "disabled"} onclick="downloadPartnerPack('${a.id}')">Download all 3 (ZIP)</button>
+  </div>`;
+}
+
 function openDetail(applicantId){
   activeApplicantId = applicantId;
   const a = applicants.find(x => x.id === applicantId);
-  const docs = documentsByApplicant[applicantId] || [];
+  const canManage = myRole === "admin";
 
   document.getElementById("detailName").textContent = a.full_name;
   document.getElementById("detailMeta").textContent = `${a.email} · ${a.phone} · Applied ${new Date(a.created_at).toLocaleDateString()}`;
 
-  let body = "";
+  let body = renderPartnerPack(a) + `<div class="section-label">All documents</div>`;
+
   DOC_ORDER.forEach(docType => {
-    const doc = docs.find(d => d.doc_type === docType);
+    const doc = getDocByType(applicantId, docType);
     const label = DOC_LABELS[docType];
+    const replaceBtn = canManage
+      ? `<button class="mini" onclick="pickReplacement('${docType}')">${doc ? "Replace" : "Upload"}</button>`
+      : "";
+
     if (!doc) {
-      body += `<div class="doc-row"><div class="info"><span class="docname" style="color:var(--ink-soft)">${label}</span><span class="meta">Not uploaded</span></div></div>`;
+      body += `<div class="doc-row"><div class="info"><span class="docname muted">${label}</span><span class="meta">Not uploaded</span></div><div class="actions">${replaceBtn}</div></div>`;
       return;
     }
-    const canManage = myRole === "admin";
+    const color = doc.status === "approved" ? "var(--ok)" : doc.status === "rejected" ? "var(--danger)" : "var(--amber)";
     body += `<div class="doc-row" id="docrow-${doc.id}">
       <div class="info">
-        <a class="docname" onclick="previewDocument('${doc.file_path}','${escapeHtml(doc.file_name)}','${doc.mime_type}')">${label}</a>
-        <span class="meta">${escapeHtml(doc.file_name)} · ${(doc.file_size_bytes/1024).toFixed(0)} KB · <b style="color:${doc.status==='approved'?'var(--ok)':doc.status==='rejected'?'var(--danger)':'var(--amber)'}">${doc.status}</b></span>
+        <a class="docname" onclick="previewDocument('${doc.id}')">${label}</a>
+        <span class="meta">${escapeHtml(doc.file_name)} · ${(doc.file_size_bytes / 1024).toFixed(0)} KB · <b style="color:${color}">${doc.status}</b></span>
       </div>
       <div class="actions">
-        <button class="icon-btn approve ${doc.status==='approved'?'on':''}" ${canManage?'':'disabled'} onclick="setDocStatus('${doc.id}','approved')" title="Approve">&#10003;</button>
-        <button class="icon-btn reject ${doc.status==='rejected'?'on':''}" ${canManage?'':'disabled'} onclick="setDocStatus('${doc.id}','rejected')" title="Reject">&#10005;</button>
+        <button class="mini" onclick="previewDocument('${doc.id}')">Preview</button>
+        <button class="mini" onclick="downloadDoc('${doc.id}')">Download</button>
+        ${replaceBtn}
+        <button class="icon-btn approve ${doc.status === 'approved' ? 'on' : ''}" ${canManage ? '' : 'disabled'} onclick="setDocStatus('${doc.id}','approved')" title="Approve">&#10003;</button>
+        <button class="icon-btn reject ${doc.status === 'rejected' ? 'on' : ''}" ${canManage ? '' : 'disabled'} onclick="setDocStatus('${doc.id}','rejected')" title="Reject">&#10005;</button>
       </div>
     </div>`;
   });
 
-  document.getElementById("detailBody").innerHTML = body;
+  const detailBody = document.getElementById("detailBody");
+  detailBody.innerHTML = body;
+  detailBody.style.opacity = "1";
+  detailBody.style.pointerEvents = "auto";
 
   const finalizeBtn = document.getElementById("finalizeBtn");
-  if (myRole === "admin") {
+  if (canManage) {
     finalizeBtn.style.display = "inline-block";
     finalizeBtn.disabled = a.status === "verified";
     finalizeBtn.textContent = a.status === "verified" ? "Already verified" : "Finalize & verify profile";
@@ -490,50 +605,152 @@ async function finalizeApplicant(){
 }
 
 // ---------------------------------------------------------------------------
-// DOCUMENT PREVIEW (signed URL, 5-minute expiry)
+// DOWNLOAD (single file + partner ZIP)
 // ---------------------------------------------------------------------------
-async function previewDocument(filePath, fileName, mimeType){
-  document.getElementById("previewTitle").textContent = fileName;
-  document.getElementById("previewBody").innerHTML = '<div class="loading"><span class="spinner"></span>Generating secure preview…</div>';
+async function downloadDoc(docId, labelOverride){
+  const doc = findDoc(docId);
+  if (!doc) return;
+  const a = applicants.find(x => x.id === doc.applicant_id);
+  try {
+    const blob = await fetchBlob(doc);
+    saveBlob(blob, downloadName(a, doc, labelOverride || DOC_LABELS[doc.doc_type]));
+  } catch (e) {
+    alert("Couldn't download this file: " + e.message);
+  }
+}
+
+function downloadCurrentPreview(){
+  if (previewDocId) downloadDoc(previewDocId);
+}
+
+async function downloadPartnerPack(applicantId){
+  const a = applicants.find(x => x.id === applicantId);
+  const btn = document.getElementById("packZipBtn");
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Preparing ZIP…";
+  try {
+    const zip = new JSZip();
+    for (const p of PARTNER_DOCS) {
+      const doc = getDocByType(applicantId, p.type);
+      if (!doc) throw new Error(`${p.label} hasn't been uploaded yet.`);
+      zip.file(downloadName(a, doc, p.label), await fetchBlob(doc));
+    }
+    const out = await zip.generateAsync({ type: "blob" });
+    saveBlob(out, `${safeName(a.full_name)} - Partner Portal Pack.zip`);
+  } catch (e) {
+    alert("Couldn't build the ZIP: " + e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = original;
+}
+
+// ---------------------------------------------------------------------------
+// RE-UPLOAD / UPLOAD MISSING DOCUMENT (admins only)
+// ---------------------------------------------------------------------------
+function pickReplacement(docType){
+  if (myRole !== "admin" || !activeApplicantId) return;
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".pdf,.jpg,.jpeg,.docx";
+  input.onchange = () => { if (input.files[0]) replaceDocument(docType, input.files[0]); };
+  input.click();
+}
+
+async function replaceDocument(docType, file){
+  const applicantId = activeApplicantId;
+  const label = DOC_LABELS[docType];
+
+  if (!ALLOWED_TYPES.includes(file.type)) { alert("Wrong format — please choose a PDF, JPEG or Word (.docx) file."); return; }
+  if (file.size > MAX_SIZE) { alert("That file is over the 5MB limit."); return; }
+
+  const existing = getDocByType(applicantId, docType);
+  if (existing && !confirm(`Replace the current ${label} with "${file.name}"?\n\nThe old file will be removed and this document goes back to Pending.`)) return;
+
+  const body = document.getElementById("detailBody");
+  body.style.opacity = ".45";
+  body.style.pointerEvents = "none";
+
+  const newPath = `${applicantId}/${docType}-${Date.now()}.${extOf(file.name) || "pdf"}`;
+  try {
+    const { error: upErr } = await sb.storage.from(BUCKET).upload(newPath, file, { contentType: file.type, upsert: false });
+    if (upErr) throw new Error(upErr.message);
+
+    const fields = {
+      file_path: newPath, file_name: file.name, mime_type: file.type, file_size_bytes: file.size,
+      status: "pending", rejection_reason: null, reviewed_by: null, reviewed_at: null,
+      uploaded_at: new Date().toISOString()
+    };
+
+    let saved;
+    if (existing) {
+      saved = await sb.from("documents").update(fields).eq("id", existing.id).select();
+    } else {
+      saved = await sb.from("documents").insert({ applicant_id: applicantId, doc_type: docType, ...fields }).select();
+    }
+    if (saved.error || !saved.data || !saved.data.length) {
+      await sb.storage.from(BUCKET).remove([newPath]);
+      throw new Error(saved.error ? saved.error.message : "You don't have permission to change this document.");
+    }
+
+    if (existing) await sb.storage.from(BUCKET).remove([existing.file_path]); // tidy up the old copy
+
+    const a = applicants.find(x => x.id === applicantId);
+    if (a && a.status === "verified") {
+      await sb.from("applicants").update({ status: "in_review" }).eq("id", applicantId); // verification is stale now
+    }
+    await sb.from("activity_log").insert({
+      admin_id: currentUser.id, applicant_id: applicantId,
+      action: existing ? "replaced_document" : "uploaded_missing_document",
+      detail: `${label}: ${file.name}`
+    });
+    await loadApplicants();
+  } catch (e) {
+    alert("Couldn't upload the document: " + e.message);
+  }
+  openDetail(applicantId);
+}
+
+// ---------------------------------------------------------------------------
+// DOCUMENT PREVIEW (file is fetched through your signed-in session)
+// ---------------------------------------------------------------------------
+async function previewDocument(docId){
+  const doc = findDoc(docId);
+  if (!doc) return;
+  const a = applicants.find(x => x.id === doc.applicant_id);
+  const pbody = document.getElementById("previewBody");
+
+  previewDocId = docId;
+  if (previewBlobUrl) { URL.revokeObjectURL(previewBlobUrl); previewBlobUrl = null; }
+  document.getElementById("previewTitle").textContent = `${DOC_LABELS[doc.doc_type]} — ${a.full_name}`;
+  pbody.innerHTML = '<div class="loading"><span class="spinner"></span>Opening document…</div>';
   document.getElementById("previewOverlay").classList.add("show");
 
-  const { data, error } = await sb.storage.from("applicant-documents").createSignedUrl(filePath, 300);
-  if (error || !data?.signedUrl) {
-    document.getElementById("previewBody").innerHTML = `<div class="preview-fallback">Couldn't generate a preview link.<br>${error?.message || ""}</div>`;
-    return;
-  }
+  try {
+    const blob = await fetchBlob(doc);
+    if (previewDocId !== docId) return; // closed or switched while loading
 
-  const url = data.signedUrl;
-  if (mimeType === "application/pdf") {
-    document.getElementById("previewBody").innerHTML = `<iframe src="${url}"></iframe>`;
-  } else if (mimeType.startsWith("image/")) {
-    document.getElementById("previewBody").innerHTML = `<img src="${url}" alt="${fileName}">`;
-  } else {
-    // Word docs (.docx): rendered fully in-browser with mammoth.js, so the
-    // actual file content never leaves your system or touches a third-party
-    // viewer — important since these can be passports, certificates, etc.
-    try {
-      const resp = await fetch(url);
-      const arrayBuffer = await resp.arrayBuffer();
-      const result = await mammoth.convertToHtml({ arrayBuffer });
-      document.getElementById("previewBody").innerHTML = `
-        <div class="docx-view">
-          <div class="docx-toolbar"><a href="${url}" target="_blank" rel="noopener">Download original .docx</a></div>
-          <div class="inner">${result.value}</div>
-        </div>`;
-    } catch (e) {
-      document.getElementById("previewBody").innerHTML = `
-        <div class="preview-fallback">
-          Couldn't render this Word document inline.
-          <br><a href="${url}" target="_blank" rel="noopener">Download to view</a>
-        </div>`;
+    if (doc.mime_type === "application/pdf") {
+      previewBlobUrl = URL.createObjectURL(blob);
+      pbody.innerHTML = `<iframe src="${previewBlobUrl}" title="PDF preview"></iframe>`;
+    } else if (doc.mime_type.startsWith("image/")) {
+      previewBlobUrl = URL.createObjectURL(blob);
+      pbody.innerHTML = `<img src="${previewBlobUrl}" alt="Document preview">`;
+    } else {
+      // Word documents render in the browser itself — nothing is sent to a third party
+      const result = await mammoth.convertToHtml({ arrayBuffer: await blob.arrayBuffer() });
+      pbody.innerHTML = `<div class="docx-view"><div class="inner">${result.value}</div></div>`;
     }
+  } catch (e) {
+    pbody.innerHTML = `<div class="preview-fallback">This preview couldn't be opened.<br><small>${escapeHtml(e.message)}</small><br>You can still use the Download button above.</div>`;
   }
 }
 
 function closePreview(){
   document.getElementById("previewOverlay").classList.remove("show");
   document.getElementById("previewBody").innerHTML = "";
+  if (previewBlobUrl) { URL.revokeObjectURL(previewBlobUrl); previewBlobUrl = null; }
+  previewDocId = null;
 }
 
 // ---------------------------------------------------------------------------

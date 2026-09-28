@@ -150,6 +150,18 @@
   .preview-box .phead .btns{display:flex;gap:8px;}
   .preview-box .phead button.dl{background:var(--navy);}
   .preview-fallback small{display:block;margin-top:8px;color:var(--danger);}
+  .team-btn{background:none;border:1px solid rgba(255,255,255,.35);color:#fff;padding:6px 14px;border-radius:7px;font-size:12.5px;margin-right:8px;}
+  .team-btn:hover{background:rgba(255,255,255,.1);}
+  .team-table{width:100%;border-collapse:collapse;margin-top:4px;}
+  .team-table th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-soft);padding:8px 10px;border-bottom:1px solid var(--line);}
+  .team-table td{padding:10px;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:middle;}
+  .team-table select{padding:5px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:12.5px;font-family:inherit;}
+  .badge-you{font-size:10px;color:var(--ink-soft);margin-left:6px;}
+  .add-member{display:grid;grid-template-columns:1fr 1fr;gap:10px;background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:16px;margin-bottom:20px;}
+  .add-member .field{margin-bottom:0;}
+  .add-member .full{grid-column:1/-1;}
+  .temp-pass{background:var(--ok-bg);border:1.5px dashed var(--ok);color:var(--ok);border-radius:8px;padding:12px 14px;font-size:13px;margin-bottom:16px;}
+  .temp-pass b{font-family:'Newsreader',serif;font-size:15px;letter-spacing:.5px;}
 </style>
 </head>
 <body>
@@ -186,6 +198,7 @@
     <div class="who">
       <span id="whoName"></span>
       <span class="role" id="whoRole"></span>
+      <button class="team-btn" id="teamBtn" onclick="openTeam()" style="display:none;">Team</button>
       <button class="logout" onclick="logout()">Sign out</button>
     </div>
   </nav>
@@ -232,6 +245,42 @@
     <div class="modal-foot">
       <span class="readonly-note" id="roleNote"></span>
       <button class="btn-finalize" id="finalizeBtn" onclick="finalizeApplicant()">Finalize &amp; verify profile</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============================== TEAM MANAGEMENT ============================== -->
+<div class="overlay" id="teamOverlay">
+  <div class="modal" style="max-width:820px;">
+    <div class="modal-head">
+      <div>
+        <h3>Team management</h3>
+        <p>Add staff, reset passwords, and control access. Admins only.</p>
+      </div>
+      <button class="x" onclick="closeTeam()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="teamStatus" class="status-line"></div>
+
+      <div class="add-member">
+        <div class="field"><label>Full name</label><input type="text" id="newName" placeholder="e.g. Sarah Kamau"></div>
+        <div class="field"><label>Email</label><input type="email" id="newEmail" placeholder="sarah@awardsrecruitment.com"></div>
+        <div class="field"><label>Role</label>
+          <select id="newRole" style="width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;">
+            <option value="team_member">Team member (view + preview only)</option>
+            <option value="admin">Admin (full control)</option>
+          </select>
+        </div>
+        <div class="field" style="display:flex;align-items:flex-end;">
+          <button class="btn-primary" style="width:100%;" onclick="createMember()">+ Add team member</button>
+        </div>
+      </div>
+
+      <table class="team-table" id="teamTable">
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="teamRows"><tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:20px;">Loading…</td></tr></tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -317,6 +366,7 @@ async function login(){
   document.getElementById("app").style.display = "flex";
   document.getElementById("whoName").textContent = profile.display_name;
   document.getElementById("whoRole").textContent = profile.role.replace("_", " ");
+  document.getElementById("teamBtn").style.display = myRole === "admin" ? "inline-block" : "none";
   document.getElementById("roleNote").textContent = myRole === "team_member"
     ? "You have view-only access. Approving, rejecting, and finalizing are restricted to admins."
     : "";
@@ -820,6 +870,124 @@ function todayStamp(){
     document.getElementById("loginPassword").focus();
   }
 })();
+
+// ---------------------------------------------------------------------------
+// TEAM MANAGEMENT — talks to /api/team, a server-side function holding the
+// Supabase service key. That key is never present in this file or any file
+// a visitor can download; it lives only in Vercel's environment settings.
+// ---------------------------------------------------------------------------
+function setTeamStatus(text, kind){
+  const el = document.getElementById("teamStatus");
+  el.className = "status-line" + (kind ? " " + kind : "");
+  el.innerHTML = text || "";
+}
+
+async function apiTeam(action, extra){
+  const { data } = await sb.auth.getSession();
+  const token = data && data.session && data.session.access_token;
+  if (!token) throw new Error("Your session has expired — please sign in again.");
+  const resp = await fetch("/api/team", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+    body: JSON.stringify(Object.assign({ action }, extra || {}))
+  });
+  let body = {};
+  try { body = await resp.json(); } catch (e) {}
+  if (!resp.ok) throw new Error(body.error || ("Request failed (" + resp.status + ")"));
+  return body;
+}
+
+function openTeam(){
+  document.getElementById("teamOverlay").classList.add("show");
+  setTeamStatus("");
+  loadTeam();
+}
+function closeTeam(){
+  document.getElementById("teamOverlay").classList.remove("show");
+}
+
+async function loadTeam(){
+  const rows = document.getElementById("teamRows");
+  rows.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:20px;">Loading…</td></tr>';
+  try {
+    const { members } = await apiTeam("list");
+    if (!members.length) { rows.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--ink-soft);padding:20px;">No team members yet.</td></tr>'; return; }
+    rows.innerHTML = members.map(m => {
+      const you = m.id === currentUser.id;
+      return `<tr>
+        <td>${escapeHtml(m.display_name)}${you ? '<span class="badge-you">(you)</span>' : ''}</td>
+        <td>${escapeHtml(m.email)}</td>
+        <td>
+          <select ${you ? "disabled" : ""} onchange="changeMemberRole('${m.id}', this.value)">
+            <option value="team_member" ${m.role==='team_member'?'selected':''}>Team member</option>
+            <option value="admin" ${m.role==='admin'?'selected':''}>Admin</option>
+          </select>
+        </td>
+        <td><span class="pill ${m.is_active ? 'verified' : 'rejected'}">${m.is_active ? 'active' : 'disabled'}</span></td>
+        <td style="white-space:nowrap;">
+          <button class="txt-btn" onclick="resetMemberPassword('${m.id}')">Reset password</button>
+          <button class="txt-btn" ${you ? "disabled" : ""} onclick="toggleMemberActive('${m.id}', ${!m.is_active})">${m.is_active ? "Disable" : "Enable"}</button>
+        </td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    rows.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--danger);padding:20px;">${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+async function createMember(){
+  const display_name = document.getElementById("newName").value.trim();
+  const email = document.getElementById("newEmail").value.trim();
+  const role = document.getElementById("newRole").value;
+  setTeamStatus("Creating account…");
+  try {
+    const result = await apiTeam("create", { display_name, email, role });
+    document.getElementById("newName").value = "";
+    document.getElementById("newEmail").value = "";
+    setTeamStatus(
+      `<div class="temp-pass">Account created for <b>${escapeHtml(email)}</b>.<br>
+       Temporary password: <b>${escapeHtml(result.temp_password)}</b><br>
+       Share this with them directly (not by plain email) — it won't be shown again. They'll be asked to set their own password on first sign-in.</div>`
+    );
+    loadTeam();
+  } catch (e) {
+    setTeamStatus(escapeHtml(e.message), "bad");
+  }
+}
+
+async function resetMemberPassword(id){
+  setTeamStatus("Resetting password…");
+  try {
+    const result = await apiTeam("reset_password", { user_id: id });
+    setTeamStatus(
+      `<div class="temp-pass">New temporary password for <b>${escapeHtml(result.email)}</b>: <b>${escapeHtml(result.temp_password)}</b><br>
+       Share this with them directly — it won't be shown again.</div>`
+    );
+  } catch (e) {
+    setTeamStatus(escapeHtml(e.message), "bad");
+  }
+}
+
+async function changeMemberRole(id, role){
+  try {
+    await apiTeam("set_role", { user_id: id, role });
+    setTeamStatus("Role updated.", "good");
+    loadTeam();
+  } catch (e) {
+    setTeamStatus(escapeHtml(e.message), "bad");
+    loadTeam();
+  }
+}
+
+async function toggleMemberActive(id, makeActive){
+  try {
+    await apiTeam("set_active", { user_id: id, is_active: makeActive });
+    setTeamStatus(makeActive ? "Access restored." : "Access disabled.", "good");
+    loadTeam();
+  } catch (e) {
+    setTeamStatus(escapeHtml(e.message), "bad");
+  }
+}
 </script>
 
 </body>

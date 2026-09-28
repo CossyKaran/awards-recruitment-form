@@ -451,7 +451,12 @@ async function submitApplication(){
       email: email,
       phone: phone
     });
-    if (applicantErr) throw new Error("Could not save your details: " + applicantErr.message);
+    if (applicantErr) {
+      if (applicantErr.code === "23505" || /applicants_email_key/i.test(applicantErr.message || "")) {
+        throw new Error("This email has already applied — contact us if you need to update your application.");
+      }
+      throw new Error("Could not save your details: " + applicantErr.message);
+    }
 
     // 2. Upload each document and record it
     for (const doc of REQUIRED_DOCS) {

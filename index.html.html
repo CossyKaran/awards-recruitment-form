@@ -111,6 +111,7 @@
   .doc.error{border-color:var(--danger);background:var(--danger-bg);}
   .doc label{display:block;font-size:13.5px;font-weight:600;margin-bottom:2px;}
   .doc .hint{font-size:11.5px;color:var(--ink-soft);display:block;margin-bottom:10px;}
+  .field .hint{font-size:12px;color:var(--ink-soft);display:block;margin-top:5px;}
   .doc .filebtn{position:relative;overflow:hidden;}
   .doc .filebtn input[type=file]{
     position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;
@@ -212,6 +213,11 @@
       <label for="phone">Phone number</label>
       <input type="tel" id="phone" placeholder="+254 7XX XXX XXX">
       <div class="err" id="err-phone"></div>
+    </div>
+    <div class="field">
+      <label for="position">Position or destination you're applying for</label>
+      <input type="text" id="position" placeholder="e.g. Caregiver – Germany">
+      <span class="hint">Applying for more than one role or country? Submit a separate application for each, so we can track them individually.</span>
     </div>
     <div class="actions">
       <span></span>
@@ -415,11 +421,13 @@ function renderReview(){
   const fullName = document.getElementById("fullName").value.trim();
   const email = document.getElementById("email").value.trim();
   const phone = document.getElementById("phone").value.trim();
+  const position = document.getElementById("position").value.trim();
 
   let rows = [
     ["Full name", fullName],
     ["Email", email],
-    ["Phone", phone]
+    ["Phone", phone],
+    ["Position / destination", position || "Not specified"]
   ].map(([k, v]) => `<div class="review-row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("");
 
   rows += REQUIRED_DOCS.map(d => {
@@ -442,6 +450,7 @@ async function submitApplication(){
   const fullName = document.getElementById("fullName").value.trim();
   const email = document.getElementById("email").value.trim();
   const phone = document.getElementById("phone").value.trim();
+  const position = document.getElementById("position").value.trim();
 
   const applicantId = crypto.randomUUID();
 
@@ -451,12 +460,10 @@ async function submitApplication(){
       id: applicantId,
       full_name: fullName,
       email: email,
-      phone: phone
+      phone: phone,
+      position_applied_for: position || null
     });
     if (applicantErr) {
-      if (applicantErr.code === "23505" || /applicants_email_key/i.test(applicantErr.message || "")) {
-        throw new Error("This email has already applied — contact us if you need to update your application.");
-      }
       throw new Error("Could not save your details: " + applicantErr.message);
     }
 

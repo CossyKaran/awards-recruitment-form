@@ -515,7 +515,7 @@ function renderTable(){
     const applied = new Date(a.created_at).toLocaleDateString(undefined, { day:"2-digit", month:"short", year:"numeric" });
     const stage = a.stage || "initiated";
     html += `<tr onclick="openDetail('${a.id}')">
-      <td class="name-cell"><b>${escapeHtml(a.full_name)}</b><span>${escapeHtml(a.email)}</span></td>
+      <td class="name-cell"><b>${escapeHtml(a.full_name)}</b><span>${escapeHtml(a.email)}${a.position_applied_for ? " · " + escapeHtml(a.position_applied_for) : ""}</span></td>
       <td>${escapeHtml(a.phone)}</td>
       <td>${applied}</td>
       <td class="docs-count">${c.approved}/${c.total} approved</td>
@@ -687,7 +687,7 @@ function openDetail(applicantId){
   const canManage = myRole === "admin";
 
   document.getElementById("detailName").textContent = a.full_name;
-  document.getElementById("detailMeta").textContent = `${a.email} · ${a.phone} · Applied ${new Date(a.created_at).toLocaleDateString()}`;
+  document.getElementById("detailMeta").textContent = `${a.email} · ${a.phone} · Applied ${new Date(a.created_at).toLocaleDateString()}${a.position_applied_for ? " · " + a.position_applied_for : ""}`;
 
   let body = renderStageBlock(a, canManage) + renderPartnerPack(a) + `<div class="section-label">All documents</div>`;
 

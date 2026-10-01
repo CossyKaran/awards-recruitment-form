@@ -189,7 +189,7 @@ function renderResult(data){
 
   document.getElementById("resultView").innerHTML = `
     <h2>Hi ${escapeHtml(data.first_name)}, here's where things stand</h2>
-    <p class="sub">Applied ${new Date(data.applied_at).toLocaleDateString()} &middot; Last updated ${new Date(data.stage_updated_at).toLocaleDateString()}</p>
+    <p class="sub">Applied ${new Date(data.applied_at).toLocaleDateString()} &middot; Last updated ${new Date(data.stage_updated_at).toLocaleDateString()}${data.position_applied_for ? " &middot; " + escapeHtml(data.position_applied_for) : ""}</p>
     <div class="stage-bar">${chips}</div>
     ${attn}
     <div class="timeline">${history || '<p class="sub">No history yet.</p>'}</div>

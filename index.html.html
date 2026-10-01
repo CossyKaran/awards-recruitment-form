@@ -247,6 +247,8 @@
     <h3>Application received</h3>
     <p>Thank you — our team will review your documents and contact you by email or phone with next steps.</p>
     <div class="ref" id="refCode"></div>
+    <p style="margin-top:18px;">Save this code — you can check your progress anytime.</p>
+    <a id="trackLink" href="#" style="display:inline-block;margin-top:6px;background:var(--navy);color:#fff;padding:11px 22px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;border-bottom:3px solid var(--gold);">Track your application</a>
   </section>
 
 </main>
@@ -483,6 +485,7 @@ async function submitApplication(){
     // 3. Success
     const refCode = "AR-" + applicantId.slice(0, 8).toUpperCase();
     document.getElementById("refCode").textContent = refCode;
+    document.getElementById("trackLink").href = "track.html?ref=" + encodeURIComponent(refCode) + "&email=" + encodeURIComponent(email);
     goToStep(4);
 
   } catch (err) {

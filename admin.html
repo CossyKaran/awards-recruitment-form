@@ -94,6 +94,30 @@
   .modal-head .x{background:none;border:none;font-size:20px;color:var(--ink-soft);line-height:1;}
   .modal-body{padding:20px 26px;overflow-y:auto;}
   .modal-foot{padding:16px 26px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+  .stage-block{border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:18px;background:var(--paper);}
+  .stage-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+  .stage-chip{font-size:11px;font-weight:700;padding:5px 10px;border-radius:20px;white-space:nowrap;letter-spacing:.2px;}
+  .stage-chip.past{background:var(--navy);color:#fff;}
+  .stage-chip.current{background:var(--gold);color:var(--navy);box-shadow:0 0 0 2px var(--navy) inset;}
+  .stage-chip.future{background:#fff;color:var(--ink-soft);border:1px solid var(--line);}
+  .stage-sep{color:var(--line);font-size:12px;}
+  .stage-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px;}
+  .stage-controls select,.stage-controls input[type=text]{padding:8px 10px;border:1.5px solid var(--line);border-radius:7px;font-size:12.5px;font-family:inherit;}
+  .stage-controls select{min-width:200px;}
+  .stage-controls input[type=text]{flex:1;min-width:180px;}
+  .mini.primary{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .stage-history{margin-top:14px;display:flex;flex-direction:column;gap:6px;max-height:140px;overflow-y:auto;}
+  .stage-history .hrow{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-soft);padding:4px 0;border-bottom:1px dashed var(--line);}
+  .stage-history .hrow b{color:var(--ink);font-weight:600;}
+  .stage-history .hrow .note{font-style:italic;}
+  .pill.initiated{background:#EEF1F5;color:#3A4150;}
+  .pill.documents_verified{background:#E7EEFB;color:#1D4ED8;}
+  .pill.profile_submitted{background:#F1E9FB;color:#6D28D9;}
+  .pill.offer_secured{background:var(--ok-bg);color:var(--ok);}
+  .pill.work_permit,.pill.visa_processing{background:var(--amber-bg);color:var(--amber);}
+  .pill.medical{background:#FDE7F3;color:#BE185D;}
+  .pill.travel_clearance{background:#E0F2FE;color:#0369A1;}
+  .pill.complete{background:var(--navy);color:#fff;}
 
   .doc-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:9px;margin-bottom:9px;background:var(--paper);}
   .doc-row .info{display:flex;flex-direction:column;}
@@ -319,6 +343,19 @@ const DOC_LABELS = {
 };
 const DOC_ORDER = Object.keys(DOC_LABELS);
 
+const STAGE_LABELS = {
+  initiated: "Application Initiated",
+  documents_verified: "Documents Verified",
+  profile_submitted: "Profile Submitted",
+  offer_secured: "Offer Secured",
+  work_permit: "Work Permit Processing",
+  visa_processing: "Visa Processing",
+  medical: "Medical Examination",
+  travel_clearance: "Travel Clearance",
+  complete: "Complete"
+};
+const STAGE_ORDER = Object.keys(STAGE_LABELS);
+
 let currentUser = null;
 let myRole = null;
 let applicants = [];      // full list from DB
@@ -470,18 +507,20 @@ function renderTable(){
   }
 
   let html = `<table><thead><tr>
-    <th>Applicant</th><th>Phone</th><th>Applied</th><th>Documents</th><th>Status</th>
+    <th>Applicant</th><th>Phone</th><th>Applied</th><th>Documents</th><th>Review status</th><th>Pipeline stage</th>
   </tr></thead><tbody>`;
 
   rows.forEach(a => {
     const c = docCompleteness(a.id);
     const applied = new Date(a.created_at).toLocaleDateString(undefined, { day:"2-digit", month:"short", year:"numeric" });
+    const stage = a.stage || "initiated";
     html += `<tr onclick="openDetail('${a.id}')">
       <td class="name-cell"><b>${escapeHtml(a.full_name)}</b><span>${escapeHtml(a.email)}</span></td>
       <td>${escapeHtml(a.phone)}</td>
       <td>${applied}</td>
       <td class="docs-count">${c.approved}/${c.total} approved</td>
       <td><span class="pill ${a.status}">${a.status.replace("_"," ")}</span></td>
+      <td><span class="pill ${stage}">${STAGE_LABELS[stage] || stage}</span></td>
     </tr>`;
   });
 
@@ -575,6 +614,73 @@ function renderPartnerPack(a){
   </div>`;
 }
 
+// ---------------------------------------------------------------------------
+// PIPELINE STAGE — where the applicant is in the full journey, from first
+// submission through to travel. Changing it is admin-only (also enforced by
+// the database itself); everyone can see it and its history.
+// ---------------------------------------------------------------------------
+function renderStageBlock(a, canManage){
+  const current = a.stage || "initiated";
+  const currentIndex = STAGE_ORDER.indexOf(current);
+
+  const chips = STAGE_ORDER.map((s, i) => {
+    const cls = i < currentIndex ? "past" : i === currentIndex ? "current" : "future";
+    return `<span class="stage-chip ${cls}" title="${STAGE_LABELS[s]}">${STAGE_LABELS[s]}</span>`;
+  }).join(`<span class="stage-sep">›</span>`);
+
+  const options = STAGE_ORDER.map(s =>
+    `<option value="${s}" ${s === current ? "selected" : ""}>${STAGE_LABELS[s]}</option>`
+  ).join("");
+
+  const controls = canManage ? `
+    <div class="stage-controls">
+      <select id="stageSelect">${options}</select>
+      <input type="text" id="stageNote" placeholder="Optional note (e.g. 'Sent to partner 30 Sep')">
+      <button class="mini primary" onclick="updateStage()">Update stage</button>
+    </div>` : "";
+
+  return `<div class="stage-block">
+    <div class="stage-bar">${chips}</div>
+    ${controls}
+    <div class="stage-history" id="stageHistory"><span class="meta">Loading history…</span></div>
+  </div>`;
+}
+
+async function loadStageHistory(applicantId){
+  const el = document.getElementById("stageHistory");
+  if (!el) return;
+  const { data, error } = await sb
+    .from("stage_history")
+    .select("stage, note, changed_at")
+    .eq("applicant_id", applicantId)
+    .order("changed_at", { ascending: false });
+
+  if (error) { el.innerHTML = `<span class="meta">Couldn't load history: ${escapeHtml(error.message)}</span>`; return; }
+  if (!data || !data.length) { el.innerHTML = `<span class="meta">No stage history yet.</span>`; return; }
+
+  el.innerHTML = data.map(h => {
+    const when = new Date(h.changed_at).toLocaleString(undefined, { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" });
+    const label = STAGE_LABELS[h.stage] || h.stage;
+    return `<div class="hrow"><span><b>${label}</b>${h.note ? ` — <span class="note">${escapeHtml(h.note)}</span>` : ""}</span><span>${when}</span></div>`;
+  }).join("");
+}
+
+async function updateStage(){
+  if (!activeApplicantId) return;
+  const stage = document.getElementById("stageSelect").value;
+  const note = document.getElementById("stageNote").value.trim();
+
+  const { error } = await sb.rpc("set_application_stage", {
+    p_applicant: activeApplicantId,
+    p_stage: stage,
+    p_note: note || null
+  });
+
+  if (error) { alert("Couldn't update the stage: " + error.message); return; }
+  await loadApplicants();
+  openDetail(activeApplicantId);
+}
+
 function openDetail(applicantId){
   activeApplicantId = applicantId;
   const a = applicants.find(x => x.id === applicantId);
@@ -583,7 +689,7 @@ function openDetail(applicantId){
   document.getElementById("detailName").textContent = a.full_name;
   document.getElementById("detailMeta").textContent = `${a.email} · ${a.phone} · Applied ${new Date(a.created_at).toLocaleDateString()}`;
 
-  let body = renderPartnerPack(a) + `<div class="section-label">All documents</div>`;
+  let body = renderStageBlock(a, canManage) + renderPartnerPack(a) + `<div class="section-label">All documents</div>`;
 
   DOC_ORDER.forEach(docType => {
     const doc = getDocByType(applicantId, docType);
@@ -616,6 +722,7 @@ function openDetail(applicantId){
   detailBody.innerHTML = body;
   detailBody.style.opacity = "1";
   detailBody.style.pointerEvents = "auto";
+  loadStageHistory(applicantId);
 
   const finalizeBtn = document.getElementById("finalizeBtn");
   if (canManage) {

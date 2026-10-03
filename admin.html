@@ -679,6 +679,35 @@ async function updateStage(){
   if (error) { alert("Couldn't update the stage: " + error.message); return; }
   await loadApplicants();
   openDetail(activeApplicantId);
+  notifyStageUpdate(activeApplicantId, stage); // fire-and-forget — the stage change already saved either way
+}
+
+async function notifyStageUpdate(applicantId, stage){
+  try {
+    const result = await apiNotify("stage_update", { applicant_id: applicantId, stage });
+    if (result.skipped === "email_not_verified") {
+      setDetailStatus("Stage updated. (No email sent — this applicant hasn't confirmed their email yet.)", "good");
+    } else {
+      setDetailStatus("Stage updated and the applicant has been emailed.", "good");
+    }
+  } catch (e) {
+    setDetailStatus("Stage updated, but the notification email failed: " + e.message, "bad");
+  }
+}
+
+async function apiNotify(action, extra){
+  const { data } = await sb.auth.getSession();
+  const token = data && data.session && data.session.access_token;
+  if (!token) throw new Error("Your session has expired — please sign in again.");
+  const resp = await fetch("/api/notify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+    body: JSON.stringify(Object.assign({ action }, extra || {}))
+  });
+  let body = {};
+  try { body = await resp.json(); } catch (e) {}
+  if (!resp.ok) throw new Error(body.error || ("Request failed (" + resp.status + ")"));
+  return body;
 }
 
 function openDetail(applicantId){

@@ -255,6 +255,7 @@
     <div class="ref" id="refCode"></div>
     <p style="margin-top:18px;">Save this code — you can check your progress anytime.</p>
     <a id="trackLink" href="#" style="display:inline-block;margin-top:6px;background:var(--navy);color:#fff;padding:11px 22px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;border-bottom:3px solid var(--gold);">Track your application</a>
+    <p id="verifyNote" style="margin-top:16px;font-size:13px;"></p>
   </section>
 
 </main>
@@ -494,11 +495,36 @@ async function submitApplication(){
     document.getElementById("refCode").textContent = refCode;
     document.getElementById("trackLink").href = "track.html?ref=" + encodeURIComponent(refCode) + "&email=" + encodeURIComponent(email);
     goToStep(4);
+    sendVerificationEmail(applicantId); // fire-and-forget — the application already succeeded either way
 
   } catch (err) {
     showBanner(err.message || "Something went wrong. Please check your connection and try again.");
     btn.disabled = false;
     btn.textContent = "Submit application";
+  }
+}
+
+async function sendVerificationEmail(applicantId){
+  const note = document.getElementById("verifyNote");
+  note.style.color = "var(--ink-soft)";
+  note.textContent = "Sending a confirmation link to your email…";
+  try {
+    const resp = await fetch("/api/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "send_verification", applicant_id: applicantId })
+    });
+    const body = await resp.json().catch(() => ({}));
+    if (resp.ok) {
+      note.textContent = "We've sent a confirmation link to your email — open it so we can keep you updated automatically.";
+    } else {
+      // Not fatal: the application itself already succeeded. Just let them know
+      // tracking still works manually via the reference code either way.
+      note.style.color = "var(--ink-soft)";
+      note.textContent = "You can still track your application with the reference code above at any time.";
+    }
+  } catch (e) {
+    note.textContent = "You can still track your application with the reference code above at any time.";
   }
 }
 </script>
